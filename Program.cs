@@ -1,10 +1,11 @@
-﻿using System.Text;
-using System.Threading.Tasks;
+using System.Formats.Tar;
+using System.IO.Compression;
 
 public class Program
 {
-    private static readonly string root = "https://raw.githubusercontent.com/github/gitignore/refs/heads/main/";
-    private static readonly StringBuilder sb = new();
+    private static string _user = "Shorotshishir";
+    private static string _repo = "gitignore";
+    private static string _branch = "main";
     private static async Task Main(string[] args)
     {
         if (args.Length < 1)
@@ -19,76 +20,122 @@ public class Program
             return;
         }
 
-        if (IgnoreDict.AvailableLangs.TryGetValue(args[0], out var additionalPath))
+        var canonicalName = IgnoreDict.GetLanguage(args[0]);
+        if (canonicalName != null)
         {
-            var fullPath = $"{root}{additionalPath}.gitignore";
-            Console.WriteLine(fullPath);
-            await WriteContent(await GetContent(fullPath));
+            Console.WriteLine($"Getting {canonicalName} gitignore...");
+            await GetGitignoreFromArchive(canonicalName);
+        }
+        else
+        {
+            Console.WriteLine($"Language '{args[0]}' not found.");
+            ShowHelp();
         }
     }
 
-    private static async Task WriteContent(Stream stream)
-    {
-        using var fstream = File.Create(Path.Combine(Environment.CurrentDirectory, ".gitignore"));
-        stream.Seek(0, SeekOrigin.Begin);
-        await stream.CopyToAsync(fstream);
-        System.Console.WriteLine("Created ...");
-    }
-
-    private static async Task<Stream> GetContent(string url)
-    {
-        using var client = new HttpClient();
-        var response = await client.GetAsync(url, HttpCompletionOption.ResponseHeadersRead);
-        response.EnsureSuccessStatusCode();
-
-        var total = response.Content.Headers.ContentLength ?? -1;
-        var input = await response.Content.ReadAsStreamAsync();
-        var output = new MemoryStream();
-
-        var buffer = new byte[81920];
-        long read = 0;
-        int bytes;
-
-        while ((bytes = await input.ReadAsync(buffer)) > 0)
-        {
-            await output.WriteAsync(buffer.AsMemory(0, bytes));
-            read += bytes;
-
-            if (total > 0)
-                Console.Write($"\rProgress: {read * 100.0 / total:0.0}%");
-            else
-                Console.Write($"\rDownloaded {read / 1024} KB");
-        }
-
-        Console.WriteLine();
-        output.Position = 0;
-        return output;
-    }
 
     private static void ShowHelp()
     {
-        var keys = IgnoreDict.AvailableLangs.Keys
-            .Select(k => k.ToLowerInvariant())
-            .Distinct()
-            .ToList();
+        var keys = IgnoreDict.GetAllLanguages().ToList();
         int max = keys.Max(s => s.Length);
 
-        sb.AppendLine("gig <command> ");
-        sb.AppendLine("");
-        sb.AppendLine("Command\n--------");
-        sb.AppendLine($"help:\t show this message");
-        sb.AppendLine("");
-        sb.AppendLine("Example\n-------");
-        sb.AppendLine("gig unity");
-        sb.AppendLine("gig Unity");
-        sb.AppendLine("");
-        sb.AppendLine("All Commands available\n-------");
+        Console.WriteLine("gig <command>");
+        Console.WriteLine("");
+        Console.WriteLine("Command");
+        Console.WriteLine("--------");
+        Console.WriteLine("help:\t show this message");
+        Console.WriteLine("");
+        Console.WriteLine("Example");
+        Console.WriteLine("-------");
+        Console.WriteLine("gig unity");
+        Console.WriteLine("gig cpp");
+        Console.WriteLine("gig c++");
+        Console.WriteLine("");
+        Console.WriteLine("All Commands available");
+        Console.WriteLine("-------");
 
         foreach (var item in keys)
         {
-            sb.AppendLine($"{item.PadRight(max)}:\tGenerate {item} gitignore");
+            Console.WriteLine($"{item.PadRight(max)}:\tGenerate {item} gitignore");
         }
-        Console.WriteLine(sb.ToString());
-        sb.Clear();
+    }
+
+    private static async Task GetGitignoreFromArchive(string targetLanguage)
+    {
+        var gigDir = CreateGigDirIfNotExists();
+        var targetFile = Path.Combine(gigDir, "gitignore.tar.gz");
+        var client = new HttpClient();
+
+        const string root = "https://github.com/";
+        var targetUrl = Path.Combine(root, _user, _repo, "archive/refs/heads", $"{_branch}.tar.gz");
+
+        var success = false;
+        while (!success)
+        {
+            if (!File.Exists(targetFile))
+            {
+                await using var fStream = new FileStream(targetFile, FileMode.Create, FileAccess.Write);
+                await using var dStream = await client.GetStreamAsync(targetUrl);
+                await dStream.CopyToAsync(fStream);
+                await fStream.FlushAsync();
+                Console.WriteLine("Downloaded root");
+            }
+
+            try
+            {
+                await using var fStream = new FileStream(targetFile, FileMode.Open, FileAccess.Read);
+                await using var tSteam = new GZipStream(fStream, CompressionMode.Decompress);
+                await using var reader = new TarReader(tSteam);
+
+                while (await reader.GetNextEntryAsync() is { } entry)
+                {
+                    var path = entry.EntryType switch
+                    {
+                        TarEntryType.HardLink => $"{entry.Name} link to {entry.LinkName}",
+                        TarEntryType.SymbolicLink => $"{entry.Name} -> {entry.LinkName}",
+                        _ => entry.Name,
+                    };
+
+                    if (path.Contains(targetLanguage))
+                    {
+                        var file = Path.Combine(Environment.CurrentDirectory, ".gitignore");
+                        await entry.ExtractToFileAsync(file, overwrite: true);
+                        Console.WriteLine($"Created {file}");
+                        break;
+                    }
+                }
+                success = true;
+            }
+            catch (EndOfStreamException)
+            {
+                File.Delete(targetFile);
+            }
+        }
+    }
+
+    private static string CreateGigDirIfNotExists()
+    {
+        var home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+        const string folder = ".gig";
+        var fullPath = Path.Combine(home, folder);
+        if (Directory.Exists(fullPath))
+        {
+            Console.WriteLine($"Found {fullPath}");
+            return fullPath;
+        }
+        try
+        {
+            var di = Directory.CreateDirectory(fullPath);
+            Console.WriteLine($"Directory created successfully at: {di.FullName}");
+        }
+        catch (IOException e)
+        {
+            Console.WriteLine($"IO Error: {e.Message}");
+        }
+        catch (Exception e)
+        {
+            Console.WriteLine($"An error occurred: {e.Message}");
+        }
+        return fullPath;
     }
 }

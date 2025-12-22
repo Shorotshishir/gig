@@ -7,6 +7,9 @@ As it is `self contained` and `single-file` , No dotnet installation is required
 
 gitignore of this project is created with this tool !!
 
+> Update : 2025/12/22  
+> Reduced net call by downloading the tar.gz in `.gig` folder. and use that as source.
+
 ## Usage
 
 - create a local git repository with
@@ -34,7 +37,7 @@ gig
 
 gig help
 ```
-
+---
 ## Build project
 
 required to build : `dotnet 8.0`
