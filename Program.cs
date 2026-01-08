@@ -5,7 +5,7 @@ public class Program
 {
     private static string _user = "Shorotshishir";
     private static string _repo = "gitignore";
-    private static string _branch = "main";
+    private static string _branch = "master";
     private static async Task Main(string[] args)
     {
         if (args.Length < 1)
@@ -17,6 +17,12 @@ public class Program
         if (args[0] == "help")
         {
             ShowHelp();
+            return;
+        }
+
+        if (args[0] == "clean")
+        {
+            DoCleanup();
             return;
         }
 
@@ -33,6 +39,26 @@ public class Program
         }
     }
 
+    private static void DoCleanup()
+    {
+        var home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+        const string folder = ".gig";
+        var fullPath = Path.Combine(home, folder);
+        if (Directory.Exists(fullPath))
+        {
+            Console.WriteLine($"Found {fullPath}");
+            var dirInfo = new DirectoryInfo(fullPath);
+            foreach (var file in dirInfo.EnumerateFiles())
+            {
+                Console.WriteLine($"removing {file.Name}");
+                file.Delete();
+            }
+        }
+        else
+        {
+            Console.WriteLine($"Nothing to clean");
+        }
+    }
 
     private static void ShowHelp()
     {
@@ -44,6 +70,7 @@ public class Program
         Console.WriteLine("Command");
         Console.WriteLine("--------");
         Console.WriteLine("help:\t show this message");
+        Console.WriteLine("clean:\t delete all items from the .gig directory");
         Console.WriteLine("");
         Console.WriteLine("Example");
         Console.WriteLine("-------");
