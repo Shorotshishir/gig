@@ -104,6 +104,7 @@ public class Program
         Console.WriteLine("--------");
         Console.WriteLine("help:\t show this message");
         Console.WriteLine("clean:\t delete all items from the .gig directory");
+        Console.WriteLine("sync:\t redownload archive to the .gig directory keeping backup");
         Console.WriteLine("");
         Console.WriteLine("Example");
         Console.WriteLine("-------");
