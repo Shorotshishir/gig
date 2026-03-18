@@ -6,11 +6,17 @@ public class Program
     private static string _user = "Shorotshishir";
     private static string _repo = "gitignore";
     private static string _branch = "master";
+    private static string targetUrl = "";
+
     private static async Task Main(string[] args)
     {
+        string root = "https://github.com/";
+        targetUrl = Path.Combine(root, _user, _repo, "archive/refs/heads", $"{_branch}.tar.gz");
+
         if (args.Length < 1)
         {
             ShowHelp();
+            // await DoDownload();
             return;
         }
 
@@ -26,6 +32,14 @@ public class Program
             return;
         }
 
+        if (args[0] == "sync")
+        {
+            await DoSync();
+            return;
+        }
+
+
+
         var canonicalName = IgnoreDict.GetLanguage(args[0]);
         if (canonicalName != null)
         {
@@ -37,6 +51,25 @@ public class Program
             Console.WriteLine($"Language '{args[0]}' not found.");
             ShowHelp();
         }
+    }
+
+    private static async Task DoSync()
+    {
+        // make backup
+        var gigDir = CreateGigDirIfNotExists();
+        var existingFilePath = Path.Combine(gigDir, "gitignore.tar.gz");
+        var backupFilePath = Path.Combine(gigDir, "gitignore.tar.gz.bak");
+
+        if (File.Exists(existingFilePath))
+        {
+            File.Copy(existingFilePath, backupFilePath, true);
+        }
+
+        // try download
+        await DoDownload(existingFilePath);
+        // check success
+        Console.WriteLine("gig is synced");
+        // if fail use the backup
     }
 
     private static void DoCleanup()
@@ -91,21 +124,13 @@ public class Program
     {
         var gigDir = CreateGigDirIfNotExists();
         var targetFile = Path.Combine(gigDir, "gitignore.tar.gz");
-        var client = new HttpClient();
-
-        const string root = "https://github.com/";
-        var targetUrl = Path.Combine(root, _user, _repo, "archive/refs/heads", $"{_branch}.tar.gz");
 
         var success = false;
         while (!success)
         {
             if (!File.Exists(targetFile))
             {
-                await using var fStream = new FileStream(targetFile, FileMode.Create, FileAccess.Write);
-                await using var dStream = await client.GetStreamAsync(targetUrl);
-                await dStream.CopyToAsync(fStream);
-                await fStream.FlushAsync();
-                Console.WriteLine("Downloaded root");
+                await DoDownload(targetFile);
             }
 
             try
@@ -138,6 +163,16 @@ public class Program
                 File.Delete(targetFile);
             }
         }
+    }
+
+    private static async Task DoDownload(string targetFile)
+    {
+        var client = new HttpClient();
+        await using var fStream = new FileStream(targetFile, FileMode.Create, FileAccess.Write);
+        await using var dStream = await client.GetStreamAsync(targetUrl);
+        await dStream.CopyToAsync(fStream);
+        await fStream.FlushAsync();
+        Console.WriteLine("Downloaded root");
     }
 
     private static string CreateGigDirIfNotExists()
