@@ -148,8 +148,14 @@ public class Program
                         _ => entry.Name,
                     };
 
-                    if (path.Contains(targetLanguage))
+                    // Extract only regular files with exact filename match
+                    var fileName = Path.GetFileName(path);
+                    var expectedFileName = $"{targetLanguage}.gitignore";
+
+                    if (fileName.Equals(expectedFileName, StringComparison.OrdinalIgnoreCase) &&
+                        entry.EntryType == TarEntryType.RegularFile)
                     {
+                        System.Console.WriteLine(targetLanguage);
                         var file = Path.Combine(Environment.CurrentDirectory, ".gitignore");
                         await entry.ExtractToFileAsync(file, overwrite: true);
                         Console.WriteLine($"Created {file}");
